@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Birthday Gift 🎂</title>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <header>
+    <h1>🎉 Happy Birthday Benchiri 🎉</h1>
+    <p class="subtitle">Send a birthday gift via M-Pesa</p>
+  </header>
+
+  <main class="card">
+    <label>Phone Number</label>
+    <input id="phone" placeholder="2547..." />
+
+    <label>Amount (KES)</label>
+    <input id="amount" value="50" />
+
+    <button onclick="sendGift()">Send Gift 💝</button>
+
+    <p id="msg"></p>
+    <div id="shukran">🙏 Shukran! Thank you for your gift 🎉</div>
+  </main>
+
+  <section class="live">
+    <h2>💰 Live Gifts</h2>
+    <div id="list"></div>
+  </section>
+
+  <script src="app.js"></script>
+
+</body>
+</html>
