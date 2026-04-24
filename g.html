@@ -1,0 +1,30 @@
+async function sendGift() {
+  const phone = document.getElementById("phone").value;
+  const amount = document.getElementById("amount").value;
+
+  document.getElementById("msg").innerText = "📲 Sending STK Push...";
+
+  await fetch("/stkpush", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone, amount })
+  });
+
+  document.getElementById("msg").innerText =
+    "Check your phone for M-Pesa prompt 👌";
+}
+
+// AUTO CHECK PAYMENT STATUS
+setInterval(async () => {
+  const res = await fetch("/status");
+  const data = await res.json();
+
+  if (data.status === "paid") {
+    document.getElementById("shukran").style.display = "block";
+  }
+
+  document.getElementById("list").innerHTML =
+    data.payments
+      .map(p => `<p>💸 ${p.phone} sent KES ${p.amount}</p>`)
+      .join("");
+}, 3000);
