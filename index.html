@@ -1,0 +1,196 @@
+import express from "express";
+import axios from "axios";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const app = express();
+app.use(express.json());
+
+// ================== MEMORY DB ==================
+let payments = [];
+let latestStatus = "pending";
+
+// ================== CONFIG ==================
+const {
+  CONSUMER_KEY,
+  CONSUMER_SECRET,
+  SHORTCODE,
+  PASSKEY,
+  CALLBACK_URL
+} = process.env;
+
+// ================== TOKEN ==================
+async function getToken() {
+  const auth = Buffer.from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`).toString("base64");
+
+  const res = await axios.get(
+    "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+    { headers: { Authorization: `Basic ${auth}` } }
+  );
+
+  return res.data.access_token;
+}
+
+// ================== STK PUSH ==================
+app.post("/stkpush", async (req, res) => {
+  try {
+    const { phone, amount } = req.body;
+
+    const token = await getToken();
+
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[-T:\.Z]/g, "")
+      .slice(0, 14);
+
+    const password = Buffer.from(
+      SHORTCODE + PASSKEY + timestamp
+    ).toString("base64");
+
+    const payload = {
+      BusinessShortCode: SHORTCODE,
+      Password: password,
+      Timestamp: timestamp,
+      TransactionType: "CustomerPayBillOnline",
+      Amount: amount,
+      PartyA: phone,
+      PartyB: SHORTCODE,
+      PhoneNumber: phone,
+      CallBackURL: CALLBACK_URL,
+      AccountReference: "BirthdayGift",
+      TransactionDesc: "Birthday Gift"
+    };
+
+    const response = await axios.post(
+      "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+      payload,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    res.json(response.data);
+
+  } catch (err) {
+    res.status(500).json({ error: "STK failed" });
+  }
+});
+
+// ================== CALLBACK ==================
+app.post("/callback", (req, res) => {
+  try {
+    const result = req.body.Body.stkCallback;
+
+    if (result.ResultCode === 0) {
+      const items = result.CallbackMetadata.Item;
+
+      const amount = items.find(i => i.Name === "Amount")?.Value;
+      const phone = items.find(i => i.Name === "PhoneNumber")?.Value;
+
+      payments.push({ phone, amount });
+      latestStatus = "paid";
+
+      console.log("✅ Payment received:", phone, amount);
+    } else {
+      latestStatus = "failed";
+    }
+
+  } catch (e) {
+    console.log("Callback error", e.message);
+  }
+
+  res.json({ ResultCode: 0 });
+});
+
+// ================== STATUS ==================
+app.get("/status", (req, res) => {
+  res.json({ status: latestStatus, payments });
+});
+
+// ================== FRONTEND (SERVED HERE) ==================
+app.get("/", (req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+<title>Birthday Gift 🎂</title>
+<style>
+body {
+  background:black;
+  color:white;
+  font-family:sans-serif;
+  text-align:center;
+}
+h1 { color:gold; }
+input { padding:10px; margin:5px; }
+button {
+  padding:10px 20px;
+  background:gold;
+  border:none;
+  cursor:pointer;
+}
+#shukran {
+  display:none;
+  font-size:30px;
+  color:gold;
+  margin-top:20px;
+}
+</style>
+</head>
+<body>
+
+<h1>🎉 Happy Birthday Benchiri 🎉</h1>
+
+<input id="phone" placeholder="2547..." />
+<br>
+<input id="amount" value="50" />
+<br>
+<button onclick="sendGift()">Send Gift 💝</button>
+
+<p id="msg"></p>
+<div id="shukran">🙏 Shukran! Thank you for your gift 🎉</div>
+
+<h3>Live Gifts</h3>
+<div id="list"></div>
+
+<script>
+async function sendGift() {
+  const phone = document.getElementById("phone").value;
+  const amount = document.getElementById("amount").value;
+
+  document.getElementById("msg").innerText = "Sending STK...";
+
+  await fetch("/stkpush", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({phone, amount})
+  });
+
+  document.getElementById("msg").innerText =
+    "Check your phone for M-Pesa prompt";
+}
+
+// AUTO STATUS CHECK
+setInterval(async () => {
+  const res = await fetch("/status");
+  const data = await res.json();
+
+  if (data.status === "paid") {
+    document.getElementById("shukran").style.display = "block";
+  }
+
+  document.getElementById("list").innerHTML =
+    data.payments.map(p =>
+      "<p>💸 " + p.phone + " sent KES " + p.amount + "</p>"
+    ).join("");
+}, 3000);
+</script>
+
+</body>
+</html>
+  `);
+});
+
+// ================== START SERVER ==================
+app.listen(5000, () => {
+  console.log("🚀 Birthday Gift System running on port 5000");
+});
